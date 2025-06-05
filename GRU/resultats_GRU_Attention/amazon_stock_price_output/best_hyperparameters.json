@@ -1,0 +1,9 @@
+{
+  "conv_filters": 64,
+  "kernel_size": 3,
+  "gru_units": 32,
+  "dropout_rate": 0.1,
+  "l2_reg": 0.001,
+  "dense_units": 32,
+  "learning_rate": 0.004969724253724245
+}
