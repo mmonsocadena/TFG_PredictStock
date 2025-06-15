@@ -58,7 +58,7 @@ if run_btn:
         st.stop()
     df = load_data(csv_path)
 
-    # 2) Buscar carpeta de resultats del model
+    # 2) Carpeta de resultats del model
     subdir = MODEL_RESULT_SUBDIR.get(model_name)
     if not subdir:
         st.error(f"No hi ha configurat resultats per a “{model_name}”")
@@ -68,7 +68,7 @@ if run_btn:
         st.error(f"No existeix la carpeta de resultats:\n`{model_dir}`")
         st.stop()
 
-    # 3) Localitzar subcarpeta del dataset
+    # 3) Subcarpeta del dataset dins model
     ds_folder = None
     for d in os.listdir(model_dir):
         if dataset_name.replace(' ', '').lower() in d.replace('_','').lower():
@@ -80,11 +80,10 @@ if run_btn:
     result_ds_dir = os.path.join(model_dir, ds_folder)
     files         = os.listdir(result_ds_dir)
 
-    # 4) Trobar fitxers de futures
+    # 4) CSV i HTML de prediccions futures
     csv_fut  = next((f for f in files if f.lower().endswith('.csv')  and 'future' in f.lower()), None)
     html_fut = next((f for f in files if f.lower().endswith('.html') and 'future' in f.lower()), None)
 
-    # 5) Mostrar CSV de prediccions a 10 dies
     if csv_fut:
         df_fut = pd.read_csv(os.path.join(result_ds_dir, csv_fut), index_col=0, parse_dates=True)
         st.subheader("📊 Prediccions a 10 dies")
@@ -92,17 +91,30 @@ if run_btn:
     else:
         st.warning("No s'ha trobat cap fitxer CSV de prediccions a 10 dies.")
 
-    # 6) Mostrar plot HTML interactiu
     if html_fut:
-        html_path = os.path.join(result_ds_dir, html_fut)
-        with open(html_path, 'r', encoding='utf-8') as f:
+        with open(os.path.join(result_ds_dir, html_fut), 'r', encoding='utf-8') as f:
             html_data = f.read()
         st.subheader("📈 Visualització de la predicció")
         components.html(html_data, height=500, scrolling=True)
     else:
         st.warning("No s'ha trobat cap fitxer HTML de visualització.")
 
-    # 7) Mostrar gràfica de preus històrics
+    # 5) **Nova secció**: Gràfica de test real vs predit
+    test_html = next(
+        (f for f in files
+         if f.lower().endswith('.html')
+            and ('test' in f.lower())),
+        None
+    )
+    if test_html:
+        with open(os.path.join(result_ds_dir, test_html), 'r', encoding='utf-8') as f:
+            test_html_data = f.read()
+        st.subheader("🔎 Gràfica Test (Reals vs Predits)")
+        components.html(test_html_data, height=500, scrolling=True)
+    else:
+        st.warning("No s'ha trobat cap fitxer HTML de gràfica de test.")
+
+    # 6) Gràfica de preus històrics
     if os.path.isdir(HIST_PLOT_DIR):
         hist_file = None
         for f in os.listdir(HIST_PLOT_DIR):
@@ -113,11 +125,10 @@ if run_btn:
                 break
         if hist_file:
             st.subheader("📉 Evolució històrica del preu")
-            img_path = os.path.join(HIST_PLOT_DIR, hist_file)
-            st.image(img_path, use_container_width=True)
+            st.image(os.path.join(HIST_PLOT_DIR, hist_file), use_container_width=True)
         else:
             st.warning(f"No he trobat cap gràfic històric per a “{dataset_name}”.")
     else:
         st.warning(f"No existeix la carpeta de gràfiques històriques:\n`{HIST_PLOT_DIR}`")
 
-#Executar fent: streamlit run 'aplicació.py'  
+#executar:  streamlit run 'aplicació.py'
