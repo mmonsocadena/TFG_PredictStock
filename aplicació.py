@@ -120,4 +120,4 @@ if run_btn:
     else:
         st.warning(f"No existeix la carpeta de gràfiques històriques:\n`{HIST_PLOT_DIR}`")
 
-#Executar fent: streamlit run 'import streamlit as st.py'  
+#Executar fent: streamlit run 'aplicació.py'  
