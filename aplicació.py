@@ -4,8 +4,9 @@ import pandas as pd
 import streamlit.components.v1 as components
 
 # --- DIRECTORIS I MAPATGE ---
-BASE_DATA_DIR    = os.path.join("Conjunt de dades Preprocessades", "Datasets")
-BASE_RESULTS_DIR = "."  # els models estan al root
+BASE_DATA_DIR       = os.path.join("Conjunt de dades Preprocessades", "Datasets")
+BASE_RESULTS_DIR    = "."  # els models estan al root
+HIST_PLOT_DIR       = os.path.join("Conjunt de dades Preprocessades", "Gràfiques Preus Històrics")
 
 DATASETS = {
     'Amazon':        'Amazon_Stock_Price_output.csv',
@@ -43,49 +44,47 @@ st.title("Predicció del preu de les accions a 10 dies")
 st.sidebar.header("Paràmetres")
 dataset_name = st.sidebar.selectbox("Escull un dataset", list(DATASETS.keys()))
 model_name   = st.sidebar.selectbox("Escull un model", MODELS)
-run_btn      = st.sidebar.button("Mostra prediccions & plot")
+run_btn      = st.sidebar.button("Mostra prediccions & plots")
 
 @st.cache_data
 def load_data(path):
     return pd.read_csv(path, index_col=0, parse_dates=True)
 
 if run_btn:
-    # 1) Carregar el dataset (sense mostrar preview)
+    # 1) Carregar el dataset
     csv_path = os.path.join(BASE_DATA_DIR, DATASETS[dataset_name])
     if not os.path.isfile(csv_path):
         st.error(f"No trobo el fitxer de dades:\n`{csv_path}`")
         st.stop()
     df = load_data(csv_path)
 
-    # 2) Buscar la carpeta de resultats del model
+    # 2) Buscar carpeta de resultats del model
     subdir = MODEL_RESULT_SUBDIR.get(model_name)
     if not subdir:
         st.error(f"No hi ha configurat resultats per a “{model_name}”")
         st.stop()
-
     model_dir = os.path.join(BASE_RESULTS_DIR, subdir)
     if not os.path.isdir(model_dir):
         st.error(f"No existeix la carpeta de resultats:\n`{model_dir}`")
         st.stop()
 
-    # 3) Localitzar la subcarpeta del dataset dins el directori del model
+    # 3) Localitzar subcarpeta del dataset
     ds_folder = None
     for d in os.listdir(model_dir):
         if dataset_name.replace(' ', '').lower() in d.replace('_','').lower():
             ds_folder = d
             break
-    if ds_folder is None:
+    if not ds_folder:
         st.error(f"No trobo cap subcarpeta per a “{dataset_name}” dins `{model_dir}`")
         st.stop()
-
     result_ds_dir = os.path.join(model_dir, ds_folder)
     files         = os.listdir(result_ds_dir)
 
-    # 4) Trobar els fitxers de futures
+    # 4) Trobar fitxers de futures
     csv_fut  = next((f for f in files if f.lower().endswith('.csv')  and 'future' in f.lower()), None)
     html_fut = next((f for f in files if f.lower().endswith('.html') and 'future' in f.lower()), None)
 
-    # 5) Mostrar el CSV de prediccions a 10 dies
+    # 5) Mostrar CSV de prediccions a 10 dies
     if csv_fut:
         df_fut = pd.read_csv(os.path.join(result_ds_dir, csv_fut), index_col=0, parse_dates=True)
         st.subheader("📊 Prediccions a 10 dies")
@@ -93,7 +92,7 @@ if run_btn:
     else:
         st.warning("No s'ha trobat cap fitxer CSV de prediccions a 10 dies.")
 
-    # 6) Mostrar el plot HTML interactiu
+    # 6) Mostrar plot HTML interactiu
     if html_fut:
         html_path = os.path.join(result_ds_dir, html_fut)
         with open(html_path, 'r', encoding='utf-8') as f:
@@ -102,3 +101,23 @@ if run_btn:
         components.html(html_data, height=500, scrolling=True)
     else:
         st.warning("No s'ha trobat cap fitxer HTML de visualització.")
+
+    # 7) Mostrar gràfica de preus històrics
+    if os.path.isdir(HIST_PLOT_DIR):
+        hist_file = None
+        for f in os.listdir(HIST_PLOT_DIR):
+            norm_f  = f.replace('_', '').lower()
+            norm_ds = dataset_name.replace(' ', '').lower()
+            if norm_ds in norm_f and 'preus' in norm_f:
+                hist_file = f
+                break
+        if hist_file:
+            st.subheader("📉 Evolució històrica del preu")
+            img_path = os.path.join(HIST_PLOT_DIR, hist_file)
+            st.image(img_path, use_container_width=True)
+        else:
+            st.warning(f"No he trobat cap gràfic històric per a “{dataset_name}”.")
+    else:
+        st.warning(f"No existeix la carpeta de gràfiques històriques:\n`{HIST_PLOT_DIR}`")
+
+#Executar fent: streamlit run 'import streamlit as st.py'  
