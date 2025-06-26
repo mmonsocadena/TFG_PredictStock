@@ -7,6 +7,19 @@ import streamlit.components.v1 as components
 BASE_DATA_DIR       = os.path.join("Conjunt de dades Preprocessades", "Datasets")
 BASE_RESULTS_DIR    = "."  # els models estan al root
 HIST_PLOT_DIR       = os.path.join("Conjunt de dades Preprocessades", "Gràfiques Preus Històrics")
+REAL_DATA       = os.path.join("Preus real dels 10 dies")
+
+# Fitxers CSV amb els preus reals dels 10 dies per a la comparació
+REAL_PRICE_CSV = {
+    'Amazon':        'amazon_prices_feb_2025.csv',
+    'Google':        'google_prices_feb_first10.csv',
+    'Euro Stoxx 50': 'eurostoxx50_prices_feb_first10.csv',
+    'Hang Seng':     'hang_seng_prices_feb_first10.csv',
+    'IBEX 35':       'ibex35_feb_first10_prices.csv',
+    'Indra':         'indra_prices_feb_first10.csv',
+    'P&G':           'procter_gamble_prices_feb_first10.csv',
+    'S&P 500':       'sp500_prices_feb_first10.csv',
+}
 
 DATASETS = {
     'Amazon':        'Amazon_Stock_Price_output.csv',
@@ -47,16 +60,30 @@ model_name   = st.sidebar.selectbox("Escull un model", MODELS)
 run_btn      = st.sidebar.button("Mostra prediccions & plots")
 
 @st.cache_data
-def load_data(path):
+def load_full_data(path):
+    """Carrega el CSV complet del model amb múltiples columnes de preus."""
     return pd.read_csv(path, index_col=0, parse_dates=True)
 
+@st.cache_data
+def load_real_prices(path):
+    """Carrega el CSV reduït amb només data i preu tancament."""
+    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    # Si només té una columna, renombra-la a 'price'
+    if len(df.columns) == 1:
+        df.columns = ['price']
+    else:
+        # Si té diverses, assumeix segona columna com a preu
+        df = df.iloc[:, [1]]
+        df.columns = ['price']
+    return df
+
 if run_btn:
-    # 1) Carregar el dataset
+    # 1) Carregar el dataset complet
     csv_path = os.path.join(BASE_DATA_DIR, DATASETS[dataset_name])
     if not os.path.isfile(csv_path):
         st.error(f"No trobo el fitxer de dades:\n`{csv_path}`")
         st.stop()
-    df = load_data(csv_path)
+    df_full = load_full_data(csv_path)
 
     # 2) Carpeta de resultats del model
     subdir = MODEL_RESULT_SUBDIR.get(model_name)
@@ -69,21 +96,17 @@ if run_btn:
         st.stop()
 
     # 3) Subcarpeta del dataset dins model
-    ds_folder = None
-    for d in os.listdir(model_dir):
-        if dataset_name.replace(' ', '').lower() in d.replace('_','').lower():
-            ds_folder = d
-            break
+    ds_folder = next((d for d in os.listdir(model_dir)
+                      if dataset_name.replace(' ', '').lower() in d.replace('_','').lower()), None)
     if not ds_folder:
         st.error(f"No trobo cap subcarpeta per a “{dataset_name}” dins `{model_dir}`")
         st.stop()
     result_ds_dir = os.path.join(model_dir, ds_folder)
     files         = os.listdir(result_ds_dir)
 
-    # 4) CSV i HTML de prediccions futures
-    csv_fut  = next((f for f in files if f.lower().endswith('.csv')  and 'future' in f.lower()), None)
-    html_fut = next((f for f in files if f.lower().endswith('.html') and 'future' in f.lower()), None)
-
+    # 4) Carregar prediccions futures
+    csv_fut = next((f for f in files
+                     if f.lower().endswith('.csv') and 'future' in f.lower()), None)
     if csv_fut:
         df_fut = pd.read_csv(os.path.join(result_ds_dir, csv_fut), index_col=0, parse_dates=True)
         st.subheader("📊 Prediccions a 10 dies")
@@ -91,6 +114,9 @@ if run_btn:
     else:
         st.warning("No s'ha trobat cap fitxer CSV de prediccions a 10 dies.")
 
+    # 5) Visualització d'HTML de prediccions
+    html_fut = next((f for f in files
+                      if f.lower().endswith('.html') and 'future' in f.lower()), None)
     if html_fut:
         with open(os.path.join(result_ds_dir, html_fut), 'r', encoding='utf-8') as f:
             html_data = f.read()
@@ -99,13 +125,23 @@ if run_btn:
     else:
         st.warning("No s'ha trobat cap fitxer HTML de visualització.")
 
-    # 5) **Nova secció**: Gràfica de test real vs predit
-    test_html = next(
-        (f for f in files
-         if f.lower().endswith('.html')
-            and ('test' in f.lower())),
-        None
-    )
+    # 6) Comparació Preu Real vs Predit (només dies previstos)
+    if csv_fut:
+        real_csv = os.path.join(REAL_DATA, REAL_PRICE_CSV[dataset_name])
+        if os.path.isfile(real_csv):
+            df_real = load_real_prices(real_csv)
+            dates_pred = df_fut.index
+            real = df_real.reindex(dates_pred)['price']
+            pred = df_fut.iloc[:, 0]
+            comp = pd.DataFrame({'Preu real': real, 'Preu predit': pred}, index=dates_pred)
+            st.subheader("💲 Comparació Preu Real vs Predit")
+            st.line_chart(comp)
+        else:
+            st.warning(f"No trobo el CSV de preus reals per a `{dataset_name}`:\n`{real_csv}`")
+
+    # 7) Gràfica de test real vs predït
+    test_html = next((f for f in files
+                      if f.lower().endswith('.html') and 'test' in f.lower()), None)
     if test_html:
         with open(os.path.join(result_ds_dir, test_html), 'r', encoding='utf-8') as f:
             test_html_data = f.read()
@@ -114,15 +150,11 @@ if run_btn:
     else:
         st.warning("No s'ha trobat cap fitxer HTML de gràfica de test.")
 
-    # 6) Gràfica de preus històrics
+    # 8) Gràfica de preus històrics
     if os.path.isdir(HIST_PLOT_DIR):
-        hist_file = None
-        for f in os.listdir(HIST_PLOT_DIR):
-            norm_f  = f.replace('_', '').lower()
-            norm_ds = dataset_name.replace(' ', '').lower()
-            if norm_ds in norm_f and 'preus' in norm_f:
-                hist_file = f
-                break
+        hist_file = next((f for f in os.listdir(HIST_PLOT_DIR)
+                          if dataset_name.replace(' ', '').lower() in f.replace('_','').lower()
+                             and 'preus' in f.lower()), None)
         if hist_file:
             st.subheader("📉 Evolució històrica del preu")
             st.image(os.path.join(HIST_PLOT_DIR, hist_file), use_container_width=True)
@@ -131,4 +163,4 @@ if run_btn:
     else:
         st.warning(f"No existeix la carpeta de gràfiques històriques:\n`{HIST_PLOT_DIR}`")
 
-#executar:  streamlit run 'aplicació.py'
+# executar:  streamlit run 'aplicació.py'
